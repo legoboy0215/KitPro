@@ -1,7 +1,5 @@
 <?php 
-
 namespace KitPro;
-
 use pocketmine\plugin\PluginBase;
 use pocketmine\command\Command;
 use pocketmine\command\CommandExecuter;
@@ -9,168 +7,213 @@ use pocketmine\command\CommandSender;
 use pocketmine\Player;
 use pocketmine\item\Item;
 use pocketmine\utils\Config;
-
-class KitPro extends PluginBase {
+use pocketmine\event\Listener;
+use pocketmine\event\player\PlayerDeathEvent;
+use pocketmine\Server;
+class KitPro extends PluginBase implements Listener {
 	
 	public function onEnable(){
+		if (!is_dir($this->getDataFolder())) mkdir($this->getDataFolder());
 		$this->players = array();
+		$this->getServer()->getPluginManager()->registerEvents($this, $this);
 		if(file_exists($this->getDataFolder() . "donators.yml")){
 			$this->donators = (new Config($this->getDataFolder()."donators.yml", Config::YAML))->getAll();
 		}else{
 			$this->donators = array();
 		}
-		$this->prefix = "[KitPro]";
+		if(file_exists($this->getDataFolder() . "kits.yml")){
+			$this -> kits = (new Config($this -> getDataFolder() . "kits.yml", Config::YAML))->getAll();
+		}
+		else{
+			$this->kits = array(
+			"soldier" => array(
+                "Donator" => false,
+                "Items" => array(
+                    array(
+                        272,
+                    	0,
+                        1
+                    ), // id, meta, count
+                    array(
+                        260,
+                    	0,
+                        3
+                    ),
+                )
+            ),
+            "wool" => array(
+                "Donator" => false,
+                "Items" => array(
+                    array(
+                        35,
+                    	0,
+                        1
+                    ),
+                    array(
+                        35,
+                    	1,
+                        1
+                    ),
+                    array(
+                        35,
+                    	2,
+                        1
+                    ),
+                )
+            ),
+            "Donator" => array(
+                "Donator" => true,
+                "Items" => array(
+                    array(
+                        276,
+                    	0,
+                        1
+                    ),
+                    array(
+                        306,
+                    	0,
+                        1
+                    ),
+                    array(
+                        307,
+                    	0,
+                        1
+                    ),
+                )
+            ),
+			);
+		}
+		$this->prefix = "[KitPro] ";
 	}
 	
 	public function onDisable(){
 		$config = new Config($this->getDataFolder()."donators.yml",Config::YAML,array());
 		$config->setAll($this->donators);
 		$config->save();
+		$kits = new Config($this -> getDataFolder() . "kits.yml", Config::YAML, array());
+		$kits->setAll($this->kits);
+		$kits->save();
 	}
 	
 	public function onCommand(CommandSender $sender, Command $cmd, $label, array $args){
-		if($cmd->getName() == "kit"){
+		if(strtolower($cmd->getName()) === "kit"){
+			if(isset($args[0])){
 			switch(strtolower($args[0])){
 				case "list":
-					if(in_array($sender->getName(), $this->donators)){
-						$sender->sendMessage($this->prefix . "Kits: Defense, Offense, Survival, Donator");
-						return true;
-					}
-					else{
-						$sender->sendMessage($this->prefix . "Kits: Defense, Offense, Survival");
-						return true;
-					}
-					break;
-				case "defense":
-					if($sender instanceof Player){
-						if(in_array($sender->getName(), $this->players)){
-							$sender->sendMessage($this->prefix . "You already have a kit!");
-						}
-						else{
-							$sender->sendMessage($this->prefix . "You have recieved the Defense Kit!");
-							$sender->getInventory()->addItem(Item::get(Item::IRON_HELMET));
-							$sender->getInventory()->addItem(Item::get(Item::IRON_BOOTS));
-							$sender->getInventory()->addItem(Item::get(Item::IRON_LEGGINGS));
-							$sender->getInventory()->addItem(Item::get(Item::IRON_CHESTPLATE));
-							$sender->getInventory()->addItem(Item::get(Item::STONE_SWORD));
-							array_push($this->players, $sender->getName());
-						}
-						return true;
-					}
-					else{
-						$sender->sendMessage($this->prefix . "Consoles don't need kits!");
-						return true;
-					}
-					break;
-				case "offense":
-					if($sender instanceof Player){
-						if(in_array($sender->getName(), $this->players)){
-							$sender->sendMessage($this->prefix . "You already have a kit!");
-						}
-						else{
-							$sender->sendMessage($this->prefix . "You have recieved the Offense Kit!");
-							$sender->getInventory()->addItem(Item::get(Item::DIAMOND_SWORD));
-							$sender->getInventory()->addItem(Item::get(Item::LEATHER_CAP));
-							$sender->getInventory()->addItem(Item::get(Item::LEATHER_BOOTS));
-							$sender->getInventory()->addItem(Item::get(Item::LEATHER_PANTS));
-							$sender->getInventory()->addItem(Item::get(Item::LEATHER_TUNIC));
-							array_push($this->players, $sender->getName());
-						}
-						return true;
-					}
-					else{
-						$sender->sendMessage($this->prefix . "Consoles don't need kits!");
-						return true;
-					}
-					break;
-				case "survival":
-					if($sender instanceof Player){
-						if(in_array($sender->getName(), $this->players)){
-							$sender->sendMessage($this->prefix . "You already have a kit!");
-						}
-						else{
-							$sender->sendMessage($this->prefix . "You have recieved the Survival Kit!");
-							$sender->getInventory()->addItem(Item::get(Item::IRON_PICKAXE));
-							$sender->getInventory()->addItem(Item::get(Item::IRON_AXE));
-							$sender->getInventory()->addItem(Item::get(Item::IRON_SHOVEL));
-							$sender->getInventory()->addItem(Item::get(Item::IRON_SWORD));
-							for($i = 1; $i <= 20; $i++){
-								$sender->getInventory()->addItem(Item::get(Item::STEAK));
+						//$sender->sendMessage($this->prefix . implode(", ", $this->kits));
+					$normalKits = 'Normal Kits: ';
+					$donatorKits = 'Donator Kits: ';
+					foreach ($this->kits as $name => $kit)
+					{
+						if ($kit['Donator'] == true)
+						{
+							if ($donatorKits === 'Donator Kits: ')
+							{
+								$donatorKits .= $name;
 							}
-							array_push($this->players, $sender->getName());
-						}
-						return true;
-					}
-					else{
-						$sender->sendMessage($this->prefix . "Consoles don't need kits!");
-						return true;
-					}
-					break;
-				case "donator":
-					if($sender instanceof Player){
-						if(in_array($sender->getName(), $this->players)){
-							$sender->sendMessage($this->prefix . "You already have a kit!");
-						}
-						else{
-							if(in_array($sender->getName(), $this->donators)){
-								$sender->sendMessage($this->prefix . "You have recieved the Donator Kit!");
-								$sender->getInventory()->addItem(Item::get(Item::DIAMOND_SWORD));
-								$sender->getInventory()->addItem(Item::get(Item::IRON_HELMET));
-								$sender->getInventory()->addItem(Item::get(Item::IRON_BOOTS));
-								$sender->getInventory()->addItem(Item::get(Item::IRON_LEGGINGS));
-								$sender->getInventory()->addItem(Item::get(Item::IRON_CHESTPLATE));
-								array_push($this->players, $sender->getName());
-							}
-							else{
-								$sender->sendMessage($this->prefix . "You are not a donator!");
+							else
+							{
+								$donatorKits .= ', ' . $name;
 							}
 						}
-						return true;
-						}	
-					else{
-						$sender->sendMessage($this->prefix . "Consoles don't need kits!");
-						return true;
+						else
+						{
+							if ($normalKits === 'Normal Kits: ')
+							{
+								$normalKits .= $name;
+							}
+							else
+							{
+								$normalKits .= ', ' . $name;
+							}
+						}
 					}
-				break;
-				case "reset":
-					if(in_array($sender->getName(), $this->players)){
-						$sender->sendMessage($this->prefix . "Do you really want to reset? This will clear your whole inventory. If so, do /kit resetyes");
-						return true;
+					if ($normalKits !== 'Normal Kits: ')
+					{
+						$sender -> sendMessage("[KitPro] " . $normalKits);
 					}
-					
-					else{
-						$sender->sendMessage($this->prefix . "You can't reset, you haven't even selected a kit!");	
-						return true;
+					if ($donatorKits !== 'Donator Kits: ')
+					{
+						$sender -> sendMessage("[KitPro] " . $donatorKits);
 					}
-					
+						return true;
 					break;
-				case "resetyes":
-					if(in_array($sender->getName(), $this->players)){
-						$sender->sendMessage($this->prefix . "You're inventory has been reset, you may pick a new kit!");
-						$sender->getInventory()->clearAll();
-						$key = array_search($sender->getName(), $this -> players);
-						unset($this -> players[$key]);
+				case "":
+					if (!$sender instanceof Player)
+					{
+						$sender->sendMessage("[KitPro] Consoles don't need kits!");
 						return true;
 					}
-					else{
-						$sender->sendMessage($this->prefix . "You can't reset, you haven't even selected a kit!");
+					$username = $sender->getName();
+					if (in_array($username, $this -> players))
+					{
+						$sender->sendMessage('[KitPro] You need to die before you can pick a new kit!');
+						return true;
+					}
+					else
+					{
+						$sender->sendMessage("[KitPro] Usage: /kit <kit name> or /kit list");
 						return true;
 					}
 					break;
 				default:
-					if(in_array($sender->getName(), $this->players)){
-						$sender->sendMessage($this->prefix . "Usage: /kit reset");
+					if (!$sender instanceof Player)
+					{
+						$sender->sendMessage("[KitPro] Consoles don't need kits!");
 						return true;
 					}
-					else{
-						$sender->sendMessage($this->prefix . "Usage: /kit <kit name> or /kit list");
+					$username = $sender->getName();
+					if (in_array($username, $this -> players))
+					{
+						$sender->sendMessage('[KitPro] You need to die before you can pick a new kit!');
+						return true;
+					}
+					if (isset($this -> kits[strtolower($args[0])]))
+					{
+						$kit = $this -> kits[strtolower($args[0])];
+						if ($kit["Donator"] == true and !in_array($username, $this -> donators))
+						{
+							$sender->sendMessage('You are not a donator!');
+							return true;
+						}
+						else
+						{
+							$this -> giveKit($kit, $sender);
+							$sender->sendMessage('[KitPro] Your kit has been given!');
+							array_push($this -> players, $username);
+							return true;
+						}
+					}
+					else
+					{
+						$sender->sendMessage("[KitPro] Usage: /kit <kit name> or /kit list");
 						return true;
 					}
 					break;
+			}
+			}
+			else{
+				if (!$sender instanceof Player)
+				{
+					$sender->sendMessage("[KitPro] Consoles don't need kits!");
+					return true;
+				}
+				$username = $sender->getName();
+				if (in_array($username, $this -> players))
+				{
+					$sender->sendMessage('[KitPro] You need to die before you can pick a new kit!');
+					return true;
+				}
+				else
+				{
+					$sender->sendMessage("[KitPro] Usage: /kit <kit name> or /kit list");
+					return true;
 				}
 			}
+		}
 			
-			if($cmd->getName() == "donator"){
+			if(strtolower($cmd->getName()) == "donator"){
+				if(isset($args[0])){
 				switch(strtolower($args[0])){
 					case "add":
 						$sender->sendMessage($this->prefix . "" . $args[1] . " has been added as a donator!");
@@ -188,6 +231,26 @@ class KitPro extends PluginBase {
 						return true;
 						break;
 				}
+				}
+				else{
+					$sender->sendMessage("[KitPro] Usage: /donator <add|rmv> <exact username>");
+					return true;
+				}
 			}
 		}
+		
+		public function giveKit($kit, $player)
+		{
+			foreach ($kit['Items'] as $val)
+			{
+					$player->getInventory()->addItem(Item::get($val[0],$val[1],$val[2]));
+			}
+		}
+		
+		public function onPlayerDeath(PlayerDeathEvent $event){
+			$event->getEntity()->sendMessage("[KitPro] You died and may now pick a new kit!");
+			$key = array_search($event->getEntity()->getName(),$this->players);
+			unset($this->players[$key]);
+		}
+		
 	}
